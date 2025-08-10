@@ -1,35 +1,35 @@
 #!/bin/bash
 
-echo "🔧 Setting up Telegram Backup Bot..."
+echo "🔧 Setting up Telegram File Backup Bot..."
 
-# نصب پایتون اگر نصب نیست
+# Check for Python3
 if ! command -v python3 &> /dev/null; then
-    echo "📦 Installing Python3..."
-    sudo apt update
-    sudo apt install -y python3 python3-pip
+    echo "📦 Python3 not found. Please install it first."
+    # Example for Debian/Ubuntu: sudo apt update && sudo apt install -y python3
+    exit 1
 fi
 
-# نصب pip اگر نصب نیست
+# Check for pip3
 if ! command -v pip3 &> /dev/null; then
-    echo "📦 Installing pip3..."
-    sudo apt install -y python3-pip
+    echo "📦 pip3 not found. Please install it first."
+    # Example for Debian/Ubuntu: sudo apt install -y python3-pip
+    exit 1
 fi
 
-# نصب کتابخانه‌های مورد نیاز
-echo "📦 Installing required packages..."
-pip3 install -r requirements.txt
+# Install required Python packages from requirements.txt
+if [ -f "requirements.txt" ]; then
+    echo "📦 Installing required Python packages..."
+    pip3 install -r requirements.txt
+else
+    echo "⚠️ requirements.txt not found. Skipping package installation."
+fi
 
-# قابل اجرا کردن فایل
+# Make the main script executable
 chmod +x backup_bot.py
 
-echo "✅ Setup completed!"
 echo ""
-echo "📋 Next steps:"
-echo "1. Run: python3 backup_bot.py --setup"
-echo "2. Enter your bot token and group information"
-echo "3. Run: python3 backup_bot.py --run (for manual backup)"
-echo "4. Or add to crontab for automatic backups"
+echo "✅ Setup is complete!"
 echo ""
-echo "⏰ To setup automatic backups every 15 minutes:"
-echo "   crontab -e"
-echo "   Add line: */15 * * * * cd $(pwd) && python3 backup_bot.py --run >> backup.log 2>&1"
+echo "👉 To run the bot, simply execute:"
+echo "   python3 backup_bot.py"
+echo ""
