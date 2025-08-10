@@ -12,6 +12,10 @@ try:
     import aiohttp
     import aiofiles
 except ImportError:
+    # این قسمت برای نصب پکیج‌ها در صورت نبودن آنهاست.
+    # توصیه می‌شود از محیط‌های مجازی (virtual environments) استفاده کنید
+    # تا از تداخل با پکیج‌های سیستمی جلوگیری شود.
+    # مثال: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
     print("Installing required packages...")
     os.system("pip install aiohttp aiofiles")
     import aiohttp
@@ -23,8 +27,9 @@ MAX_FILE_SIZE = 45 * 1024 * 1024  # 45MB (تلگرام حداکثر 50MB قبو�
 class TelegramBackupBot:
     def __init__(self):
         self.bot_token = None
-        self.group_id = None
-        self.topic_id = None
+        self.admin_id = None  # اضافه شدن admin_id
+        self.group_id = None # این متغیر همچنان در کانفیگ می‌ماند اما برای ارسال به پی‌وی استفاده نمی‌شود.
+        self.topic_id = None # این متغیر همچنان در کانفیگ می‌ماند اما برای ارسال به پی‌وی استفاده نمی‌شود.
         self.source_dir = None
         
     def load_config(self):
@@ -34,6 +39,7 @@ class TelegramBackupBot:
                 with open(CONFIG_FILE, 'r') as f:
                     config = json.load(f)
                     self.bot_token = config.get('bot_token')
+                    self.admin_id = config.get('admin_id') # بارگذاری admin_id
                     self.group_id = config.get('group_id')
                     self.topic_id = config.get('topic_id')
                     self.source_dir = config.get('source_dir')
@@ -46,6 +52,7 @@ class TelegramBackupBot:
         """ذخیره تنظیمات در فایل"""
         config = {
             'bot_token': self.bot_token,
+            'admin_id': self.admin_id, # ذخیره admin_id
             'group_id': self.group_id,
             'topic_id': self.topic_id,
             'source_dir': self.source_dir
@@ -83,13 +90,13 @@ class TelegramBackupBot:
         cron_command = f"*/{minutes} * * * * cd {current_dir} && python3 backup_bot.py --run >> backup.log 2>&1"
         
         print(f"\n📋 Cron job to be added:")
-        print(f"   {cron_command}")
+        print(f"    {cron_command}")
         
         confirm = input("\nAdd this cron job? (y/n): ").strip().lower()
         if confirm not in ['y', 'yes']:
             print("ℹ️ Cron job not added. You can add it manually later:")
-            print(f"   crontab -e")
-            print(f"   Add line: {cron_command}")
+            print(f"    crontab -e")
+            print(f"    Add line: {cron_command}")
             return
         
         try:
@@ -129,8 +136,8 @@ class TelegramBackupBot:
         except Exception as e:
             print(f"❌ Failed to add cron job: {e}")
             print("Please add it manually:")
-            print(f"   crontab -e")
-            print(f"   Add line: {cron_command}")
+            print(f"    crontab -e")
+            print(f"    Add line: {cron_command}")
     
     def get_user_input(self):
         """دریافت اطلاعات از کاربر"""
@@ -148,9 +155,23 @@ class TelegramBackupBot:
             else:
                 print("❌ Please enter a valid bot token!")
         
-        # Group ID
-        while not self.group_id:
-            group_input = input("👥 Enter Group ID (numeric, e.g., -1001234567890): ").strip()
+        # Admin ID (جدید)
+        while not self.admin_id:
+            admin_input = input("👤 Enter your Telegram User ID (Admin ID) to receive backups in private chat: ").strip()
+            try:
+                self.admin_id = int(admin_input)
+                # یک تست ساده برای معتبر بودن آیدی
+                if not (self.admin_id > 0 or self.admin_id < 0): # IDs can be negative for channels/groups
+                    print("❌ Invalid Admin ID! User ID should be a non-zero integer.")
+                    self.admin_id = None
+                    continue
+                break
+            except ValueError:
+                print("❌ Please enter a valid numeric Admin ID!")
+
+        # Group ID (اختیاری - برای نگهداری در کانفیگ اما استفاده نمی‌شود)
+        group_input = input("👥 Enter Group ID (optional, for future group backups, press Enter to skip): ").strip()
+        if group_input:
             try:
                 if group_input.startswith('-100'):
                     self.group_id = int(group_input)
@@ -158,18 +179,22 @@ class TelegramBackupBot:
                     self.group_id = int(group_input)
                 else:
                     self.group_id = int(f"-100{group_input}")
-                break
             except ValueError:
-                print("❌ Please enter a valid numeric group ID!")
+                print("⚠️ Invalid group ID, skipping...")
+                self.group_id = None
+        else:
+            self.group_id = None
         
-        # Topic ID (اختیاری)
-        topic_input = input("📌 Enter Topic ID (optional, press Enter to skip): ").strip()
+        # Topic ID (اختیاری - برای نگهداری در کانفیگ اما استفاده نمی‌شود)
+        topic_input = input("📌 Enter Topic ID (optional, for future group backups, press Enter to skip): ").strip()
         if topic_input:
             try:
                 self.topic_id = int(topic_input)
             except ValueError:
                 print("⚠️ Invalid topic ID, skipping...")
                 self.topic_id = None
+        else:
+            self.topic_id = None
         
         # Source Directory
         while not self.source_dir:
@@ -188,8 +213,9 @@ class TelegramBackupBot:
         
         print("\n✅ Configuration completed!")
         print(f"Bot Token: {self.bot_token[:10]}...")
-        print(f"Group ID: {self.group_id}")
-        print(f"Topic ID: {self.topic_id if self.topic_id else 'None (main chat)'}")
+        print(f"Admin User ID: {self.admin_id}") # نمایش admin_id
+        print(f"Group ID (Saved but not used for private chat): {self.group_id if self.group_id else 'None'}")
+        print(f"Topic ID (Saved but not used for private chat): {self.topic_id if self.topic_id else 'None'}")
         print(f"Source Directory: {self.source_dir}")
         
         self.save_config()
@@ -245,14 +271,14 @@ class TelegramBackupBot:
             print(f"⚠️ Warning: File size ({size_mb:.2f} MB) exceeds Telegram limit!")
             
             # سعی در فشرده‌سازی بیشتر
-            print("🔧 Trying maximum compression...")
+            print("🔧 Trying maximum compression by including essential files only...")
             os.unlink(backup_path)
             
             with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_file:
                 backup_path = tmp_file.name
             
-            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_STORED) as zipf:
-                # فقط فایل‌های اصلی رو بکاپ میکنیم
+            with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_STORED) as zipf: # ZIP_STORED بدون فشرده‌سازی
+                # فقط فایل‌های اصلی رو بکاپ میکنیم (شما می‌توانید این لیست را تغییر دهید)
                 essential_extensions = {'.py', '.json', '.txt', '.md', '.yml', '.yaml', '.env'}
                 
                 for root, dirs, files in os.walk(self.source_dir):
@@ -267,23 +293,19 @@ class TelegramBackupBot:
             
             file_size = os.path.getsize(backup_path)
             size_mb = file_size / (1024 * 1024)
-            print(f"📦 Compressed backup: {size_mb:.2f} MB")
-        
+            print(f"📦 Compressed backup (essential files): {size_mb:.2f} MB")
+            
         return backup_path, f"backup_{timestamp}.zip"
     
     async def send_to_telegram(self, file_path, filename):
         """ارسال فایل به تلگرام"""
         url = f"https://api.telegram.org/bot{self.bot_token}/sendDocument"
         
-        # تنظیم پارامترها
+        # تنظیم پارامترها برای ارسال به ادمین
         data = {
-            'chat_id': self.group_id,
+            'chat_id': self.admin_id, # تغییر از group_id به admin_id
             'caption': f"🔄 Auto Backup\n📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n📁 {os.path.basename(self.source_dir)}"
         }
-        
-        # اگر تاپیک آیدی داریم اضافه میکنیم
-        if self.topic_id:
-            data['message_thread_id'] = self.topic_id
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -292,12 +314,13 @@ class TelegramBackupBot:
                     form_data.add_field('chat_id', str(data['chat_id']))
                     form_data.add_field('caption', data['caption'])
                     
-                    if self.topic_id:
-                        form_data.add_field('message_thread_id', str(self.topic_id))
+                    # topic_id حذف شد، چون برای ارسال به پی‌وی کاربرد ندارد.
+                    # if self.topic_id:
+                    #     form_data.add_field('message_thread_id', str(self.topic_id))
                     
                     form_data.add_field('document', f, filename=filename)
                     
-                    print("📤 Uploading backup to Telegram...")
+                    print(f"📤 Uploading backup to Telegram (to Admin ID: {self.admin_id})...")
                     async with session.post(url, data=form_data) as response:
                         result = await response.json()
                         
@@ -307,6 +330,9 @@ class TelegramBackupBot:
                         else:
                             error_msg = result.get('description', 'Unknown error')
                             print(f"❌ Failed to send backup: {error_msg}")
+                            # پیام خطای خاص برای حالت "bot can't initiate conversation"
+                            if "bot can't initiate conversation with the user" in error_msg.lower():
+                                print("💡 Hint: Please start a conversation with your bot first (send /start or any message).")
                             return False
         
         except Exception as e:
@@ -319,6 +345,13 @@ class TelegramBackupBot:
             # ساخت بکاپ
             backup_path, filename = self.create_compressed_backup()
             
+            # بررسی اینکه آیا admin_id تنظیم شده است
+            if not self.admin_id:
+                print("❌ Admin User ID is not set. Please run with --setup to configure.")
+                if os.path.exists(backup_path):
+                    os.unlink(backup_path) # پاک کردن فایل موقت
+                return False
+
             # ارسال به تلگرام
             success = await self.send_to_telegram(backup_path, filename)
             
@@ -347,8 +380,8 @@ def main():
                 return
         else:
             print("Usage:")
-            print("  python3 backup_bot.py --setup   (Initial setup)")
-            print("  python3 backup_bot.py --run     (Run backup)")
+            print("  python3 backup_bot.py --setup    (Initial setup)")
+            print("  python3 backup_bot.py --run      (Run backup)")
             return
     
     # اگر کانفیگ وجود نداره، راه‌اندازی اولیه
